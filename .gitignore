@@ -1,0 +1,11 @@
+# Jamais dans Git : secrets et données personnelles des adhérents
+.env
+data/
+*.bak
+state.json
+state.reset-*.bak
+
+# Binaires et archives
+bin/
+/ag-hacf
+*.tar.gz

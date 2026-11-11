@@ -1,0 +1,62 @@
+{{define "scrutins"}}{{template "head" .}}
+<div class="top">
+{{template "logomini"}}
+<div class="tt"><h1>Scrutins</h1></div>
+<span class="chip"><i></i>{{.Actor}}</span>
+</div>
+<div class="pills"><span>Votes électroniques anonymes (statuts, art. 11)</span></div>
+{{if .Message}}<div class="good">{{.Message}}</div>{{end}}
+<div class="bar"><a class="btn ghost" href="/admin">← Retour à l'administration</a></div>
+
+<div class="note" style="margin-top:0">
+<b>Comment ça marche.</b> Le vote est <b>anonyme</b> : seul le total de chaque choix est conservé. À l'ouverture d'un scrutin, la liste des voix est figée (adhérents « présents » + procurations) et les réponses ne sont plus modifiables. Les adhérents votent depuis leur lien personnel : dès l'ouverture du premier scrutin, ce lien les envoie directement dans la salle de vote (le formulaire présent / absent disparaît). Un seul scrutin peut être ouvert à la fois. Seuil de 25 % des membres : {{.Total}} adhérent(s) importé(s).
+</div>
+
+{{range .Scrutins}}{{$sc := .}}
+<div class="card" style="margin-bottom:1rem">
+<div class="th" style="display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem">
+<h2 style="margin:0;flex:1;min-width:12rem">#{{.ID}} · {{.Titre}}</h2>
+{{if eq .Statut "ouvert"}}<span class="pill p-present">Ouvert</span>{{else if eq .Statut "clos"}}<span class="pill p-absent">Clos</span>{{else}}<span class="pill">Brouillon</span>{{end}}
+</div>
+{{if .Description}}<p class="mut" style="margin-top:0">{{.Description}}</p>{{end}}
+<p class="dim" style="font-size:.85rem;margin-top:0">{{if eq .Kind "decision"}}Pour / Contre / Abstention{{else}}Choix : {{range $i, $o := .Options}}{{if $i}} · {{end}}{{$o}}{{end}}{{end}}</p>
+
+{{if eq .Statut "brouillon"}}
+<div class="bar" style="margin:0">
+<form method="post" action="/admin/scrutins/open"><input type="hidden" name="id" value="{{.ID}}"><button type="submit">Ouvrir le vote</button></form>
+<form method="post" action="/admin/scrutins/delete"><input type="hidden" name="id" value="{{.ID}}"><button class="btn ghost" type="submit">Supprimer</button></form>
+</div>
+{{else if eq .Statut "ouvert"}}
+<p><b>{{.Exprimees}}</b> voix exprimées sur <b>{{.Voix}}</b>. <span class="mut">Les résultats sont masqués tant que le vote est ouvert. La page se met à jour toute seule.</span></p>
+<form method="post" action="/admin/scrutins/close"><input type="hidden" name="id" value="{{.ID}}"><button type="submit">Clore le vote et afficher les résultats</button></form>
+{{else}}
+{{if .Issue}}<div class="issue {{.IssueTon}}">{{.Issue}}</div>{{end}}
+<table style="margin:.6rem 0">
+<thead><tr><th>Choix</th><th>Voix</th><th>%</th></tr></thead>
+<tbody>
+{{range $i, $o := $sc.Options}}<tr{{if isWin $sc.Gagnants $i}} class="win"{{end}}><td class="n">{{$o}}</td><td>{{index $sc.Counts $i}}</td><td class="mut">{{index $sc.Pcts $i}} %</td></tr>
+{{end}}
+</tbody></table>
+<p>{{.Exprimees}} voix exprimées sur {{.Voix}} possibles.
+{{if .Quorum}}<span class="ok">Seuil de {{.Seuil}} voix (25 % des membres) atteint.</span>{{else}}<span class="ko">Seuil de {{.Seuil}} voix (25 % des membres) non atteint.</span>{{end}}
+{{if eq .Kind "decision"}}<br>{{if .Majorite}}<span class="ok">Plus de « Pour » que de « Contre ».</span>{{else}}<span class="ko">Pas de majorité de « Pour » sur « Contre ».</span>{{end}}{{end}}</p>
+<p class="dim" style="font-size:.82rem">Résultat indicatif : le bureau valide la décision selon les statuts (majorité des voix des membres présents ou représentés et au moins 25 % des membres).</p>
+{{end}}
+</div>
+{{else}}<div class="card empty" style="margin-bottom:1rem">Aucun scrutin pour le moment.</div>{{end}}
+
+<details class="acc"{{if not .Scrutins}} open{{end}}>
+<summary>Créer un scrutin</summary>
+<div class="body">
+<form method="post" action="/admin/scrutins/create">
+<p><input type="text" name="titre" placeholder="Titre (ex. Approbation des comptes de la saison)" maxlength="200" required></p>
+<p><input type="text" name="description" placeholder="Précision facultative affichée aux adhérents" maxlength="600"></p>
+<p><select name="kind">
+<option value="decision">Pour / Contre / Abstention (comptes, budget, cotisations…)</option>
+<option value="choix">Plusieurs choix (candidats…) + vote blanc</option>
+</select></p>
+<p class="mut" style="margin-bottom:.3rem">Pour « Plusieurs choix » : un choix par ligne</p>
+<p><textarea name="options" rows="4" placeholder="Prénom Nom du candidat 1&#10;Prénom Nom du candidat 2" maxlength="1200"></textarea></p>
+<button type="submit">Créer le scrutin</button>
+</form></div></details>
+{{template "foot" .}}{{end}}

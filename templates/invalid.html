@@ -1,0 +1,7 @@
+{{define "invalid"}}{{template "headc" .}}
+<div class="card hero"><div class="ribbon"></div><div class="in">
+<div class="hd">{{template "logo"}}<h1>Lien invalide ou expiré</h1></div>
+<p class="mut ctr">Ce lien ne correspond à aucune convocation active. Utilisez le lien personnel reçu par email.</p>
+</div></div>
+<p class="sub">Besoin d'aide : {{.Contact}}</p>
+{{template "footc" .}}{{end}}

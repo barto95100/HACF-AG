@@ -1,0 +1,14 @@
+{{define "reset"}}{{template "headc" .}}
+<div class="card hero"><div class="ribbon"></div><div class="in">
+<div class="hd">{{template "logo"}}<h1>Remise à zéro</h1></div>
+{{if .Message}}<div class="good">{{.Message}}</div>{{end}}
+<p>Vous allez effacer <b>{{.Stats.Total}} adhérent(s)</b> et <b>{{.Stats.Repondus}} réponse(s)</b>.</p>
+<p class="mut">Tous les liens déjà envoyés cesseront de fonctionner. Il faudra réimporter les adhérents et renvoyer l'emailing. Une copie de l'état actuel est conservée sur le serveur avant l'effacement.</p>
+<form method="post" action="/admin/reset">
+<p><label class="mut"><input type="checkbox" name="ack" value="1" required> Je comprends que cette action est définitive pour les utilisateurs de l'application.</label></p>
+<p class="mut" style="margin-bottom:.3rem">Pour confirmer, saisissez <code>{{.Link}}</code> :</p>
+<p><input type="text" name="confirm" autocomplete="off" required></p>
+<p style="margin-top:1.2rem"><button type="submit">Effacer définitivement</button> <a class="btn ghost" href="/admin">Annuler</a></p>
+</form>
+</div></div>
+{{template "footc" .}}{{end}}

@@ -1,0 +1,45 @@
+{{define "vote"}}{{template "headc" .}}
+<div class="card hero"><div class="in">
+<div class="hd">{{template "logo"}}<h1>Salle de vote</h1><p class="mut">{{.AGName}}</p></div>
+<p>Bonjour <b>{{.Member.FullName}}</b>,</p>
+{{if .Error}}<div class="err">{{.Error}}</div>{{end}}
+{{if .Done}}<div class="good">Votre vote a bien été enregistré. Il est anonyme : personne ne peut savoir ce que vous avez choisi.</div>{{end}}
+{{if not .Room.Open}}
+<p class="mut ctr">Aucun vote n'est ouvert pour le moment.<br>Cette page se met à jour toute seule.</p>
+{{else if not .Room.HasVoices}}
+<h2>{{.Room.Open.Titre}}</h2>
+<div class="note">Un vote est en cours, mais vous n'avez pas de voix : seuls les adhérents qui avaient répondu « présent » avant son ouverture (ou qui portent une procuration) peuvent voter.</div>
+{{else if .Room.Voted}}
+<h2>{{.Room.Open.Titre}}</h2>
+<div class="good">Vous avez voté. Merci ! Cette page se met à jour toute seule pour le prochain vote.</div>
+{{else}}
+<h2>{{.Room.Open.Titre}}</h2>
+{{if .Room.Open.Description}}<p class="mut">{{.Room.Open.Description}}</p>{{end}}
+<form method="post" action="/v">
+<input type="hidden" name="t" value="{{.Token}}">
+<input type="hidden" name="s" value="{{.Room.Open.ID}}">
+{{range $i, $o := .Room.Open.Options}}<label class="opt"><input type="radio" name="c" value="{{$i}}" required>{{$o}}</label>
+{{end}}
+{{if .Room.Mandants}}<div class="note">Vous portez aussi {{len .Room.Mandants}} procuration(s). Par défaut, elles suivent votre choix ; vous pouvez les voter différemment ci-dessous.</div>
+{{range .Room.Mandants}}<p class="mut" style="margin-bottom:.3rem">Procuration de <b>{{.Nom}} {{.Prenom}}</b> :</p>
+<select name="m_{{.ID}}"><option value="">Même choix que le mien</option>{{range $i, $o := $.Room.Open.Options}}<option value="{{$i}}">{{$o}}</option>{{end}}</select>
+{{end}}{{end}}
+<button class="wide" type="submit">Valider mon vote</button>
+<p class="sub">Vote anonyme : seul le total de chaque choix est conservé. Un vote validé ne peut plus être modifié.</p>
+</form>
+{{end}}
+{{if .Closed}}<hr><h2>Résultats des votes clos</h2>
+{{range .Closed}}<h3>{{.Titre}}</h3>
+{{if .Issue}}<div class="issue {{.IssueTon}}">{{.Issue}}</div>{{end}}
+<table style="margin:.4rem 0 .2rem">
+<thead><tr><th>Choix</th><th>Voix</th><th>%</th></tr></thead>
+<tbody>
+{{$sc := .}}{{range $i, $o := .Options}}<tr{{if isWin $sc.Gagnants $i}} class="win"{{end}}><td class="n">{{$o}}</td><td>{{index $sc.Counts $i}}</td><td class="mut">{{index $sc.Pcts $i}} %</td></tr>
+{{end}}
+</tbody></table>
+<p class="sub">{{.Exprimees}} voix exprimées sur {{.Voix}}. Résultat indicatif, validé par le bureau.</p>
+{{end}}{{end}}
+{{if not .Started}}<hr><p class="ctr"><a class="btn ghost" href="/r?t={{.Token}}">Retour à ma réponse</a></p>{{end}}
+</div></div>
+<p class="sub">Une question ? {{.Contact}}</p>
+{{template "footc" .}}{{end}}

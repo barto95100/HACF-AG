@@ -1,0 +1,11 @@
+# Exemple : à adapter à ton compose existant (labels Traefik / AreNET inchangés).
+# Seule différence : "image:" remplace le binaire monté en bind mount.
+services:
+  ag-hacf:
+    image: ghcr.io/barto95100/hacf-ag:latest   # image publiée par GitHub Actions
+    container_name: ag-hacf
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data            # état de l'AG (reste en bind mount, propriétaire 10001)
+    # networks, labels… : comme aujourd'hui

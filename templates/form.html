@@ -1,0 +1,32 @@
+{{define "form"}}{{template "headc" .}}
+<div class="card hero"><div class="ribbon"></div><div class="in">
+<div class="hd">{{template "logo"}}<h1>{{.AGName}}</h1>{{if .AGDateText}}<p class="mut">{{.AGDateText}}</p>{{end}}</div>
+<p>Bonjour <b>{{.Member.FullName}}</b>,</p>
+{{if or .Closed .Started}}
+{{if .Started}}<div class="err"><b>L'assemblée a commencé : les réponses sont figées.</b></div>{{else}}<div class="err"><b>Les réponses sont closes</b> (date limite : {{.Deadline}}).</div>{{end}}
+{{if .Started}}<p class="ctr"><a class="btn ghost" href="/v?t={{.Token}}">Voir les résultats des votes</a></p>{{end}}
+{{if .Current}}<p>Votre réponse enregistrée : <b>{{choix .Current.Choix}}</b>{{if .MandataireN}} — mandataire : <b>{{.MandataireN}}</b>{{end}}.</p>{{else}}<p>Aucune réponse n'a été enregistrée de votre part.</p>{{end}}
+{{else}}
+<p class="mut">Merci d'indiquer si vous serez présent(e) à l'assemblée générale. Vous pouvez modifier votre réponse jusqu'au <b>{{.Deadline}}</b>.</p>
+{{if .Saved}}<div class="good">Votre réponse a bien été enregistrée.</div>{{end}}
+{{if .Error}}<div class="err">{{.Error}}</div>{{end}}
+{{if gt .Holds 0}}<div class="note">Vous détenez actuellement <b>{{.Holds}}</b> procuration(s) : vous devez être présent(e). Si vous ne pouvez finalement pas venir, prévenez les personnes qui vous ont donné procuration (elles pourront la confier à quelqu'un d'autre) ou contactez le bureau.</div>{{end}}
+<form method="post" action="/r">
+<input type="hidden" name="t" value="{{.Token}}">
+<label class="opt"><input type="radio" name="choix" value="present" required {{if and .Current (eq .Current.Choix "present")}}checked{{end}}>Je serai <b>présent(e)</b></label>
+{{if eq .Holds 0}}
+<label class="opt"><input type="radio" name="choix" value="absent" {{if and .Current (eq .Current.Choix "absent")}}checked{{end}}>Je serai <b>absent(e)</b>, sans procuration</label>
+{{if .Options}}<label class="opt"><input type="radio" name="choix" value="mandat" {{if and .Current (eq .Current.Choix "mandat")}}checked{{end}}>Je serai <b>absent(e)</b> et je donne <b>procuration</b> à :
+<select name="mandataire">
+<option value="">— choisir un adhérent —</option>
+{{range .Options}}<option value="{{.ID}}" {{if and $.Current (eq $.Current.MandataireID .ID)}}selected{{end}}>{{.Nom}} {{.Prenom}}</option>{{end}}
+</select></label>
+{{else}}<div class="note">Pour donner procuration, il faut choisir un adhérent ayant déjà confirmé sa présence. Aucun n'est disponible pour le moment : revenez plus tard.</div>{{end}}
+{{end}}
+<button class="wide" type="submit">Enregistrer ma réponse</button>
+</form>
+{{if .Current}}<p class="sub">Réponse actuelle : <b>{{choix .Current.Choix}}</b>{{if .MandataireN}} — mandataire : {{.MandataireN}}{{end}} · mise à jour le {{fdate .Current.UpdatedAt}}</p>{{end}}
+{{end}}
+</div></div>
+<p class="sub">Une question ? {{.Contact}}</p>
+{{template "footc" .}}{{end}}

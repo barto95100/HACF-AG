@@ -1,0 +1,85 @@
+{{define "admin"}}{{template "head" .}}
+<div class="top">
+{{template "logomini"}}
+<div class="tt"><h1>{{.AGName}}</h1></div>
+<span class="chip"><i></i>{{.Actor}}</span>
+</div>
+<div class="pills"><span>Date limite : <b>{{.Deadline}}</b></span>{{if .Stats.Closed}}<span class="ko"><b>Réponses closes</b></span>{{end}}<span><b>{{.Max}}</b> procuration(s) max par personne</span></div>
+{{if .Message}}<div class="good">{{.Message}}</div>{{end}}
+
+<div class="stats">
+<div class="stat"><b>{{.Stats.Total}}</b><span>convoqués</span></div>
+<div class="stat"><b>{{.Stats.Ouverts}}</b><span>ont ouvert le lien</span></div>
+<div class="stat"><b>{{.Stats.Repondus}}</b><span>réponses</span></div>
+<div class="stat"><b class="ok">{{.Stats.Presents}}</b><span>présents</span></div>
+<div class="stat"><b>{{.Stats.Absents}}</b><span>absents</span></div>
+<div class="stat"><b>{{.Stats.Mandats}}</b><span>procurations</span></div>
+<div class="stat"><b>{{.Stats.Representes}}</b><span>présents + représentés</span></div>
+</div>
+{{if .Stats.Total}}<div class="split" role="img" aria-label="Répartition des réponses"><i class="s1" style="width:{{.Stats.PctP}}%"></i><i class="s3" style="width:{{.Stats.PctM}}%"></i><i class="s2" style="width:{{.Stats.PctA}}%"></i></div>
+<div class="legend"><span><b style="background:var(--ok)"></b>présents</span><span><b style="background:oklch(70% .15 295)"></b>procurations</span><span><b style="background:var(--dim)"></b>absents</span><span>le reste : sans réponse</span></div>{{end}}
+<div class="bar"><a class="btn" href="/admin/scrutins">Scrutins (votes)</a><a class="btn ghost" href="/admin/export.csv">Exporter la feuille (CSV)</a></div>
+
+<details class="acc tbl" id="adherents"{{if .Filtered}} open{{end}}>
+<summary>Adhérents <span class="badge">{{if .Filtered}}{{len .Rows}} sur {{.Stats.Total}}{{else}}{{.Stats.Total}}{{end}}</span></summary>
+<form class="filters" method="get" action="/admin#adherents">
+<input type="text" name="q" value="{{.Q}}" placeholder="Rechercher un nom, prénom ou email" maxlength="80" autocomplete="off">
+<select name="f" aria-label="Filtrer par statut">
+<option value="">Tous les statuts</option>
+<option value="present"{{if eq .Filter "present"}} selected{{end}}>Présents</option>
+<option value="mandat"{{if eq .Filter "mandat"}} selected{{end}}>Procurations</option>
+<option value="absent"{{if eq .Filter "absent"}} selected{{end}}>Absents</option>
+<option value="sans"{{if eq .Filter "sans"}} selected{{end}}>Sans réponse</option>
+<option value="relance"{{if eq .Filter "relance"}} selected{{end}}>Ont ouvert, sans réponse (à relancer)</option>
+<option value="jamais"{{if eq .Filter "jamais"}} selected{{end}}>Lien jamais ouvert</option>
+</select>
+<button type="submit">Filtrer</button>
+{{if .Filtered}}<a class="btn ghost" href="/admin#adherents">Réinitialiser</a>{{end}}
+</form>
+<table>
+<thead><tr><th>Adhérent</th><th>Lien ouvert</th><th>Réponse</th><th>Mandataire</th><th>Procurations</th></tr></thead>
+<tbody>
+{{range .Rows}}<tr><td class="n">{{.Member.Nom}} {{.Member.Prenom}}<span class="sm">{{.Member.Email}}</span></td>
+<td class="mut">{{if .Member.FirstOpenAt.IsZero}}—{{else}}{{fdate .Member.FirstOpenAt}}{{end}}</td>
+<td>{{if .Response}}{{if eq .Response.Choix "present"}}<span class="pill p-present">Présent(e)</span>{{else if eq .Response.Choix "absent"}}<span class="pill p-absent">Absent(e)</span>{{else}}<span class="pill p-mandat">Procuration</span>{{end}}{{else}}<span class="pill">Sans réponse</span>{{end}}</td>
+<td>{{.Mandataire}}</td><td>{{if gt .Holds 0}}<span class="pill p-mandat">{{.Holds}}</span>{{end}}</td></tr>
+{{else}}<tr><td colspan="5" class="empty">{{if .Filtered}}Aucun adhérent ne correspond à cette recherche.{{else}}Aucun adhérent importé.{{end}}</td></tr>{{end}}
+</tbody></table>
+</details>
+
+{{if .Dolibarr}}<details class="acc">
+<summary>Synchroniser depuis Dolibarr</summary>
+<div class="body">
+<p class="mut">Lit directement dans Dolibarr les adhérents <b>validés dont l'adhésion est en cours</b>. « Aperçu » ne modifie rien. « Importer » ajoute seulement les nouveaux adhérents (les déjà importés sont ignorés) et télécharge leurs liens, <b>une seule fois</b>.</p>
+<div class="bar" style="margin:0">
+<form method="post" action="/admin/sync/preview"><button class="btn ghost" type="submit">Aperçu</button></form>
+<form method="post" action="/admin/sync/import"><button type="submit">Importer les nouveaux et télécharger les liens</button></form>
+</div></div></details>
+{{end}}
+<details class="acc">
+<summary>Importer un fichier ou régénérer un lien</summary>
+<div class="body"><div class="grid2" style="margin:1rem 0 0">
+<div>
+<h2>Importer des adhérents</h2>
+<p class="mut" style="margin-top:0">CSV issu de Dolibarr (email, nom, prénom ; en-tête facultatif). Les liens personnels sont générés <b>une seule fois</b> et renvoyés dans un fichier <code>email;name;firstname;other</code> à importer dans l'emailing Dolibarr.</p>
+<form method="post" action="/admin/import" enctype="multipart/form-data">
+<p><input type="file" name="file" accept=".csv,text/csv,text/plain" required></p>
+<p><label class="mut"><input type="checkbox" name="regen" value="1"> Régénérer aussi les liens des adhérents déjà importés (invalide les anciens liens)</label></p>
+<button type="submit">Importer et télécharger les liens</button>
+</form></div>
+<div>
+<h2>Régénérer un lien</h2>
+<p class="mut" style="margin-top:0">Pour un adhérent qui a perdu son email : un nouveau lien est généré et l'ancien est invalidé.</p>
+<form method="post" action="/admin/regen">
+<p><input type="email" name="email" placeholder="email de l'adhérent" required></p>
+<button type="submit">Générer un nouveau lien</button>
+</form></div>
+</div></div></details>
+
+<details class="acc">
+<summary>Zone sensible</summary>
+<div class="body">
+<p class="mut">Efface tous les adhérents, leurs réponses et leurs liens (utile après des tests). Une confirmation en deux étapes est demandée.</p>
+<a class="btn ghost" href="/admin/reset">Remettre à zéro…</a>
+</div></details>
+{{template "foot" .}}{{end}}

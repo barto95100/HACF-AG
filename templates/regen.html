@@ -1,0 +1,9 @@
+{{define "regen"}}{{template "headc" .}}
+<div class="card hero"><div class="ribbon"></div><div class="in">
+<div class="hd">{{template "logo"}}<h1>Nouveau lien généré</h1></div>
+<p><b>{{.Issued.Prenom}} {{.Issued.Nom}}</b> <span class="mut">— {{.Issued.Email}}</span></p>
+<p class="mut">L'ancien lien ne fonctionne plus. Ce lien n'est affiché qu'une seule fois :</p>
+<p><code>{{.Link}}</code></p>
+<p style="margin-top:1.2rem"><a class="btn ghost" href="/admin">Retour à l'administration</a></p>
+</div></div>
+{{template "footc" .}}{{end}}
