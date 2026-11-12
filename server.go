@@ -94,6 +94,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/export.csv", s.admin(s.handleExport))
 	mux.HandleFunc("POST /admin/import", s.admin(s.handleImport))
 	mux.HandleFunc("POST /admin/regen", s.admin(s.handleRegen))
+	mux.HandleFunc("POST /admin/pseudos", s.admin(s.handlePseudos))
 	mux.HandleFunc("GET /admin/reset", s.admin(s.handleResetPage))
 	mux.HandleFunc("POST /admin/reset", s.admin(s.handleReset))
 	mux.HandleFunc("POST /admin/sync/preview", s.admin(s.handleSyncPreview))
@@ -186,7 +187,7 @@ func (s *Server) formFor(m Member, token string) formData {
 		fd.Current = &r
 		if r.Choix == ChoixMandat {
 			if mm, ok := s.store.MemberByID(r.MandataireID); ok {
-				fd.MandataireN = mm.FullName()
+				fd.MandataireN = mm.Public()
 			}
 		}
 	}
@@ -310,7 +311,7 @@ func filterRows(rows []Row, q, f string) []Row {
 	q = fold(q)
 	var out []Row
 	for _, r := range rows {
-		if q != "" && !strings.Contains(fold(r.Member.Nom+" "+r.Member.Prenom+" "+r.Member.Email), q) &&
+		if q != "" && !strings.Contains(fold(r.Member.Nom+" "+r.Member.Prenom+" "+r.Member.Email+" "+r.Member.Pseudo), q) &&
 			!strings.Contains(fold(r.Member.Prenom+" "+r.Member.Nom), q) {
 			continue
 		}
@@ -368,7 +369,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request, user strin
 	w.Write([]byte("\xEF\xBB\xBF"))
 	cw := csv.NewWriter(w)
 	cw.Comma = ';'
-	cw.Write([]string{"nom", "prenom", "email", "reponse", "mandataire", "procurations_detenues", "date_reponse", "lien_ouvert_le"})
+	cw.Write([]string{"nom", "prenom", "pseudo", "email", "reponse", "mandataire", "procurations_detenues", "date_reponse", "lien_ouvert_le"})
 	for _, row := range st.Rows {
 		rep, date, opened := "sans réponse", "", ""
 		if !row.Member.FirstOpenAt.IsZero() {
@@ -378,7 +379,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request, user strin
 			rep = map[string]string{ChoixPresent: "présent", ChoixAbsent: "absent", ChoixMandat: "absent avec procuration"}[row.Response.Choix]
 			date = row.Response.UpdatedAt.In(s.cfg.Loc).Format("2006-01-02 15:04")
 		}
-		cw.Write([]string{csvSafe(row.Member.Nom), csvSafe(row.Member.Prenom), csvSafe(row.Member.Email), rep,
+		cw.Write([]string{csvSafe(row.Member.Nom), csvSafe(row.Member.Prenom), csvSafe(row.Member.Pseudo), csvSafe(row.Member.Email), rep,
 			csvSafe(row.Mandataire), strconv.Itoa(row.Holds), date, opened})
 	}
 	cw.Flush()
@@ -446,6 +447,52 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request, user strin
 	w.Write(tokensCSV(issued))
 }
 
+// handlePseudos met à jour les pseudos depuis un CSV (colonnes email et pseudo), sans toucher aux liens.
+func (s *Server) handlePseudos(w http.ResponseWriter, r *http.Request, user string) {
+	back := func(msg string) {
+		http.Redirect(w, r, "/admin?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+	if err := r.ParseMultipartForm(2 << 20); err != nil {
+		http.Error(w, "fichier trop gros ou invalide", http.StatusBadRequest)
+		return
+	}
+	f, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "fichier manquant", http.StatusBadRequest)
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		http.Error(w, "lecture impossible", http.StatusBadRequest)
+		return
+	}
+	rows, hasCol, err := parseImportFull(data)
+	if err != nil {
+		back("Pseudos refusés : " + err.Error())
+		return
+	}
+	if !hasCol {
+		back("Pseudos refusés : aucune colonne « pseudo » dans l'en-tête du fichier (colonnes attendues : email, pseudo).")
+		return
+	}
+	rep, err := s.store.UpdatePseudos(rows, user)
+	if err != nil {
+		back("Pseudos refusés : " + err.Error())
+		return
+	}
+	msg := fmt.Sprintf("Pseudos : %d mis à jour, %d déjà à jour, %d ligne(s) sans pseudo.", rep.Updated, rep.Unchanged, rep.NoPseudo)
+	if rep.Doublons > 0 {
+		msg += fmt.Sprintf(" %d ligne(s) en double (même email) : la première a été gardée.", rep.Doublons)
+	}
+	if n := len(rep.Unknown); n > 0 {
+		msg += fmt.Sprintf(" %d email(s) inconnu(s) de l'appli, ignoré(s).", n)
+	}
+	msg += " Les liens des adhérents n'ont pas changé."
+	back(msg)
+}
+
 func (s *Server) handleRegen(w http.ResponseWriter, r *http.Request, user string) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 	if err := r.ParseForm(); err != nil {
@@ -463,9 +510,15 @@ func (s *Server) handleRegen(w http.ResponseWriter, r *http.Request, user string
 
 // parseImport lit un CSV (séparateur ; ou ,) avec ou sans en-tête : email, nom, prénom.
 func parseImport(data []byte) ([]ImportRow, error) {
+	rows, _, err := parseImportFull(data)
+	return rows, err
+}
+
+// parseImportFull fait de même et indique si une colonne « pseudo » figure dans l'en-tête.
+func parseImportFull(data []byte) ([]ImportRow, bool, error) {
 	data = bytes.TrimPrefix(data, []byte("\xEF\xBB\xBF"))
 	if len(bytes.TrimSpace(data)) == 0 {
-		return nil, errors.New("fichier vide")
+		return nil, false, errors.New("fichier vide")
 	}
 	first := data
 	if i := bytes.IndexByte(data, '\n'); i >= 0 {
@@ -481,9 +534,9 @@ func parseImport(data []byte) ([]ImportRow, error) {
 	cr.FieldsPerRecord = -1
 	recs, err := cr.ReadAll()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	ie, in, ip := 0, 1, 2
+	ie, in, ip, ipseudo := 0, 1, 2, -1
 	start := 0
 	if len(recs) > 0 {
 		hasAt := false
@@ -494,7 +547,7 @@ func parseImport(data []byte) ([]ImportRow, error) {
 		}
 		if !hasAt {
 			start = 1
-			ie, in, ip = -1, -1, -1
+			ie, in, ip, ipseudo = -1, -1, -1, -1
 			for i, c := range recs[0] {
 				switch strings.ToLower(strings.TrimSpace(c)) {
 				case "email", "e-mail", "mail", "courriel", "e-mail address", "email address":
@@ -503,10 +556,12 @@ func parseImport(data []byte) ([]ImportRow, error) {
 					in = i
 				case "prenom", "prénom", "firstname", "first name":
 					ip = i
+				case "pseudo", "pseudonyme", "login", "username", "identifiant", "surnom", "nickname":
+					ipseudo = i
 				}
 			}
 			if ie < 0 {
-				return nil, errors.New("colonne email introuvable dans l'en-tête")
+				return nil, false, errors.New("colonne email introuvable dans l'en-tête")
 			}
 		}
 	}
@@ -521,16 +576,16 @@ func parseImport(data []byte) ([]ImportRow, error) {
 		if len(rec) == 0 || (len(rec) == 1 && strings.TrimSpace(rec[0]) == "") {
 			continue
 		}
-		row := ImportRow{Email: get(rec, ie), Nom: get(rec, in), Prenom: get(rec, ip)}
+		row := ImportRow{Email: get(rec, ie), Nom: get(rec, in), Prenom: get(rec, ip), Pseudo: get(rec, ipseudo)}
 		if row.Email == "" {
-			return nil, fmt.Errorf("ligne %d : email manquant", n+start+1)
+			return nil, false, fmt.Errorf("ligne %d : email manquant", n+start+1)
 		}
 		rows = append(rows, row)
 	}
 	if len(rows) == 0 {
-		return nil, errors.New("aucune ligne exploitable")
+		return nil, false, errors.New("aucune ligne exploitable")
 	}
-	return rows, nil
+	return rows, ipseudo >= 0, nil
 }
 
 // dolibarr renvoie le client Dolibarr, ou nil si la synchronisation n'est pas configurée.

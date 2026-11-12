@@ -19,7 +19,7 @@
 {{if .Options}}<label class="opt"><input type="radio" name="choix" value="mandat" {{if and .Current (eq .Current.Choix "mandat")}}checked{{end}}>Je serai <b>absent(e)</b> et je donne <b>procuration</b> à :
 <select name="mandataire">
 <option value="">— choisir un adhérent —</option>
-{{range .Options}}<option value="{{.ID}}" {{if and $.Current (eq $.Current.MandataireID .ID)}}selected{{end}}>{{.Nom}} {{.Prenom}}</option>{{end}}
+{{range .Options}}<option value="{{.ID}}" {{if and $.Current (eq $.Current.MandataireID .ID)}}selected{{end}}>{{.Public}}</option>{{end}}
 </select></label>
 {{else}}<div class="note">Pour donner procuration, il faut choisir un adhérent ayant déjà confirmé sa présence. Aucun n'est disponible pour le moment : revenez plus tard.</div>{{end}}
 {{end}}

@@ -35,6 +35,7 @@ type Member struct {
 	Email     string    `json:"email"`
 	Nom       string    `json:"nom"`
 	Prenom    string    `json:"prenom"`
+	Pseudo    string    `json:"pseudo,omitempty"` // nom affiché aux autres adhérents (repli : nom et prénom)
 	TokenHash string    `json:"token_hash"`
 	CreatedAt time.Time `json:"created_at"`
 	// Suivi d'ouverture du lien personnel (informatif : un antivirus de messagerie
@@ -45,6 +46,15 @@ type Member struct {
 }
 
 func (m Member) FullName() string { return strings.TrimSpace(m.Prenom + " " + m.Nom) }
+
+// Public est le nom montré aux autres adhérents (liste de procuration, salle de vote) :
+// le pseudo s'il existe, sinon « NOM Prénom ».
+func (m Member) Public() string {
+	if m.Pseudo != "" {
+		return m.Pseudo
+	}
+	return strings.TrimSpace(m.Nom + " " + m.Prenom)
+}
 
 type Response struct {
 	MemberID     int       `json:"member_id"`
@@ -318,10 +328,10 @@ func (s *Store) EligibleMandataires(memberID int) []Member {
 		if s.mandatesHeldLocked(m.ID, memberID) >= s.MaxMandats {
 			continue
 		}
-		out = append(out, Member{ID: m.ID, Nom: m.Nom, Prenom: m.Prenom})
+		out = append(out, Member{ID: m.ID, Nom: m.Nom, Prenom: m.Prenom, Pseudo: m.Pseudo})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		a, b := strings.ToLower(out[i].Nom+" "+out[i].Prenom), strings.ToLower(out[j].Nom+" "+out[j].Prenom)
+		a, b := strings.ToLower(out[i].Public()), strings.ToLower(out[j].Public())
 		return a < b
 	})
 	return out
@@ -329,7 +339,7 @@ func (s *Store) EligibleMandataires(memberID int) []Member {
 
 // ---------- Import / tokens ----------
 
-type ImportRow struct{ Email, Nom, Prenom string }
+type ImportRow struct{ Email, Nom, Prenom, Pseudo string }
 
 type IssuedToken struct {
 	Email, Nom, Prenom, Token string
@@ -387,7 +397,7 @@ func (s *Store) ImportMembers(rows []ImportRow, regen bool, actor string) (issue
 		} else {
 			s.st.Members = append(s.st.Members, Member{
 				ID: s.st.NextID, Email: email, Nom: strings.TrimSpace(r.Nom), Prenom: strings.TrimSpace(r.Prenom),
-				TokenHash: hashToken(tok), CreatedAt: s.Now().UTC(),
+				Pseudo: cleanPseudo(r.Pseudo), TokenHash: hashToken(tok), CreatedAt: s.Now().UTC(),
 			})
 			s.st.NextID++
 			i = len(s.st.Members) - 1
@@ -403,6 +413,113 @@ func (s *Store) ImportMembers(rows []ImportRow, regen bool, actor string) (issue
 		return nil, 0, e
 	}
 	return issued, skipped, nil
+}
+
+const maxPseudo = 40
+
+// cleanPseudo nettoie un pseudo : espaces réduits, caractères de contrôle retirés, 40 caractères max.
+func cleanPseudo(p string) string {
+	var b strings.Builder
+	for _, r := range p {
+		if r < 32 || r == 127 {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	out := strings.Join(strings.Fields(b.String()), " ")
+	if rs := []rune(out); len(rs) > maxPseudo {
+		out = string(rs[:maxPseudo])
+	}
+	return out
+}
+
+// PseudoReport résume une mise à jour des pseudos.
+type PseudoReport struct {
+	Updated   int      // pseudos ajoutés ou modifiés
+	Unchanged int      // déjà à jour
+	Doublons  int      // lignes en double (même email), ignorées
+	NoPseudo  int      // lignes sans pseudo (ignorées)
+	Unknown   []string // emails absents de l'appli (ignorés)
+}
+
+// UpdatePseudos met à jour uniquement le pseudo des adhérents existants (repérés par leur email).
+// Les liens (jetons), noms, prénoms et réponses ne sont jamais modifiés. Si deux adhérents se
+// retrouvaient avec le même nom affiché, rien n'est modifié et l'erreur liste les doublons.
+func (s *Store) UpdatePseudos(rows []ImportRow, actor string) (PseudoReport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var rep PseudoReport
+	next := map[int]string{}
+	for i, m := range s.st.Members {
+		next[i] = m.Pseudo
+	}
+	seen := map[string]bool{}
+	for _, r := range rows {
+		email, err := normEmail(r.Email)
+		if err != nil {
+			return PseudoReport{}, err
+		}
+		if seen[email] {
+			rep.Doublons++
+			continue
+		}
+		seen[email] = true
+		i, ok := s.byEmail[email]
+		if !ok {
+			rep.Unknown = append(rep.Unknown, email)
+			continue
+		}
+		p := cleanPseudo(r.Pseudo)
+		if p == "" {
+			rep.NoPseudo++
+			continue
+		}
+		if next[i] == p {
+			rep.Unchanged++
+			continue
+		}
+		next[i] = p
+		rep.Updated++
+	}
+	// doublons : seulement entre pseudos renseignés (deux homonymes sans pseudo ne bloquent pas)
+	owner := map[string][]string{}
+	for i := range s.st.Members {
+		if next[i] == "" {
+			continue
+		}
+		k := strings.ToLower(next[i])
+		owner[k] = append(owner[k], next[i])
+	}
+	var dup []string
+	for _, v := range owner {
+		if len(v) > 1 {
+			dup = append(dup, v[0])
+		}
+	}
+	if len(dup) > 0 {
+		sort.Strings(dup)
+		if len(dup) > 5 {
+			dup = append(dup[:5], "…")
+		}
+		return PseudoReport{}, RuleError("Plusieurs adhérents auraient le même nom affiché : " + strings.Join(dup, ", ") + ". Rien n'a été modifié.")
+	}
+	if rep.Updated == 0 {
+		return rep, nil
+	}
+	old := make([]string, len(s.st.Members))
+	for i := range s.st.Members {
+		old[i] = s.st.Members[i].Pseudo
+		s.st.Members[i].Pseudo = next[i]
+	}
+	s.audit(actor, "pseudos", fmt.Sprintf("%d mis à jour, %d inchangé(s), %d sans pseudo, %d inconnu(s)", rep.Updated, rep.Unchanged, rep.NoPseudo, len(rep.Unknown)))
+	if err := s.persist(); err != nil {
+		for i := range s.st.Members {
+			s.st.Members[i].Pseudo = old[i]
+		}
+		s.st.Audit = s.st.Audit[:len(s.st.Audit)-1]
+		return PseudoReport{}, err
+	}
+	return rep, nil
 }
 
 // Regenerate émet un nouveau token pour un adhérent (l'ancien lien ne marche plus).

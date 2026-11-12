@@ -21,7 +21,7 @@
 {{range $i, $o := .Room.Open.Options}}<label class="opt"><input type="radio" name="c" value="{{$i}}" required>{{$o}}</label>
 {{end}}
 {{if .Room.Mandants}}<div class="note">Vous portez aussi {{len .Room.Mandants}} procuration(s). Par défaut, elles suivent votre choix ; vous pouvez les voter différemment ci-dessous.</div>
-{{range .Room.Mandants}}<p class="mut" style="margin-bottom:.3rem">Procuration de <b>{{.Nom}} {{.Prenom}}</b> :</p>
+{{range .Room.Mandants}}<p class="mut" style="margin-bottom:.3rem">Procuration de <b>{{.Public}}</b> :</p>
 <select name="m_{{.ID}}"><option value="">Même choix que le mien</option>{{range $i, $o := $.Room.Open.Options}}<option value="{{$i}}">{{$o}}</option>{{end}}</select>
 {{end}}{{end}}
 <button class="wide" type="submit">Valider mon vote</button>

@@ -37,13 +37,14 @@
 {{if .Filtered}}<a class="btn ghost" href="/admin#adherents">Réinitialiser</a>{{end}}
 </form>
 <table>
-<thead><tr><th>Adhérent</th><th>Lien ouvert</th><th>Réponse</th><th>Mandataire</th><th>Procurations</th></tr></thead>
+<thead><tr><th>Adhérent</th><th>Pseudo</th><th>Lien ouvert</th><th>Réponse</th><th>Mandataire</th><th>Procurations</th></tr></thead>
 <tbody>
 {{range .Rows}}<tr><td class="n">{{.Member.Nom}} {{.Member.Prenom}}<span class="sm">{{.Member.Email}}</span></td>
+<td>{{if .Member.Pseudo}}{{.Member.Pseudo}}{{else}}<span class="mut">—</span>{{end}}</td>
 <td class="mut">{{if .Member.FirstOpenAt.IsZero}}—{{else}}{{fdate .Member.FirstOpenAt}}{{end}}</td>
 <td>{{if .Response}}{{if eq .Response.Choix "present"}}<span class="pill p-present">Présent(e)</span>{{else if eq .Response.Choix "absent"}}<span class="pill p-absent">Absent(e)</span>{{else}}<span class="pill p-mandat">Procuration</span>{{end}}{{else}}<span class="pill">Sans réponse</span>{{end}}</td>
 <td>{{.Mandataire}}</td><td>{{if gt .Holds 0}}<span class="pill p-mandat">{{.Holds}}</span>{{end}}</td></tr>
-{{else}}<tr><td colspan="5" class="empty">{{if .Filtered}}Aucun adhérent ne correspond à cette recherche.{{else}}Aucun adhérent importé.{{end}}</td></tr>{{end}}
+{{else}}<tr><td colspan="6" class="empty">{{if .Filtered}}Aucun adhérent ne correspond à cette recherche.{{else}}Aucun adhérent importé.{{end}}</td></tr>{{end}}
 </tbody></table>
 </details>
 
@@ -57,7 +58,7 @@
 </div></div></details>
 {{end}}
 <details class="acc">
-<summary>Importer un fichier ou régénérer un lien</summary>
+<summary>Importer un fichier, mettre à jour les pseudos, régénérer un lien</summary>
 <div class="body"><div class="grid2" style="margin:1rem 0 0">
 <div>
 <h2>Importer des adhérents</h2>
@@ -66,6 +67,13 @@
 <p><input type="file" name="file" accept=".csv,text/csv,text/plain" required></p>
 <p><label class="mut"><input type="checkbox" name="regen" value="1"> Régénérer aussi les liens des adhérents déjà importés (invalide les anciens liens)</label></p>
 <button type="submit">Importer et télécharger les liens</button>
+</form></div>
+<div>
+<h2>Mettre à jour les pseudos</h2>
+<p class="mut" style="margin-top:0">CSV avec une colonne <code>email</code> et une colonne <code>pseudo</code> (en-tête obligatoire). Le pseudo remplace le nom dans la liste de procuration. <b>Les liens ne changent pas.</b> Un pseudo vide laisse le nom et le prénom.</p>
+<form method="post" action="/admin/pseudos" enctype="multipart/form-data">
+<p><input type="file" name="file" accept=".csv,text/csv,text/plain" required></p>
+<button type="submit">Mettre à jour les pseudos</button>
 </form></div>
 <div>
 <h2>Régénérer un lien</h2>
